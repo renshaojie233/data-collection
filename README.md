@@ -10,7 +10,13 @@ local/
 remote/
   gello_software/            # Remote ROS2/GELLO control stack
   franka_cpp_control/        # Remote replay (track JSON, impedance/velocity)
+assets/
+  gui_screenshot.png         # GUI screenshot
 ```
+
+## GUI Screenshot
+
+![GUI Screenshot](assets/gui_screenshot.png)
 
 ## Quick Start (Local GUI)
 
