@@ -13,7 +13,7 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 # Configuration
 REMOTE_HOST="172.16.1.2"
 REMOTE_USER="rsj"
-REMOTE_PASSWORD="2064027038"
+REMOTE_PASSWORD="${REMOTE_PASSWORD:-}"
 REMOTE_PORT=22
 TCP_PORT=9999
 
@@ -46,14 +46,22 @@ echo ""
 
 # Function to run SSH commands
 run_ssh() {
-    sshpass -p "$REMOTE_PASSWORD" ssh -o StrictHostKeyChecking=no "$REMOTE_USER@$REMOTE_HOST" "$@" 2>/dev/null || true
+    if [ -n "$REMOTE_PASSWORD" ]; then
+        sshpass -p "$REMOTE_PASSWORD" ssh -o StrictHostKeyChecking=no "$REMOTE_USER@$REMOTE_HOST" "$@" 2>/dev/null || true
+    else
+        ssh -o StrictHostKeyChecking=no "$REMOTE_USER@$REMOTE_HOST" "$@" 2>/dev/null || true
+    fi
 }
 
 # Function to upload file
 upload_file() {
     local src="$1"
     local dst="$2"
-    sshpass -p "$REMOTE_PASSWORD" scp -o StrictHostKeyChecking=no "$src" "$REMOTE_USER@$REMOTE_HOST:$dst" 2>/dev/null
+    if [ -n "$REMOTE_PASSWORD" ]; then
+        sshpass -p "$REMOTE_PASSWORD" scp -o StrictHostKeyChecking=no "$src" "$REMOTE_USER@$REMOTE_HOST:$dst" 2>/dev/null
+    else
+        scp -o StrictHostKeyChecking=no "$src" "$REMOTE_USER@$REMOTE_HOST:$dst" 2>/dev/null
+    fi
 }
 
 # Cleanup function - will be called on exit

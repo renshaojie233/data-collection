@@ -23,9 +23,12 @@ python3 local/take_data/take_video_action/video_action_recorder.py
 `local/take_data/take_video_action/video_action_recorder.py`
 - `REMOTE_HOST`
 - `REMOTE_USER`
-- `REMOTE_PASSWORD`
 - `REMOTE_PORT`
-Note: this file currently contains credentials; update them locally before use.
+Credentials are **not stored** in the repo. Set the password via env if needed:
+```
+export REMOTE_PASSWORD=your_password_here
+```
+If `REMOTE_PASSWORD` is empty, the GUI uses normal SSH (keys/agent).
 
 3) The GUI defaults to **relative control** (can switch in the right panel).
 
@@ -98,6 +101,26 @@ scripts/sync_remote_from_robot.sh
 ```
 
 If you do not set `SSH_PASS`, the script uses normal SSH and expects keys/agent.
+
+## Credentials Policy
+
+- No passwords or tokens are committed to this repo.
+- GUI uses `REMOTE_PASSWORD` environment variable for SSH (optional).
+- Sync script uses `SSH_PASS` environment variable (optional).
+
+## System Configuration (Current Machines)
+
+Local data collection machine:
+- OS: Ubuntu 22.04.3 LTS (kernel 6.2.0-26-generic)
+- CPU: Intel(R) Core(TM) i9-14900KF (32 threads)
+- RAM: 188 GiB
+- Disk: 1.8T (root filesystem)
+
+Remote robot machine:
+- OS: Ubuntu 22.04.5 LTS (kernel 6.12.58-rt14)
+- CPU: Intel(R) Core(TM) Ultra 9 285H
+- RAM: 30 GiB
+- Disk: 492G (root filesystem)
 
 ## Remote Setup (GELLO Control)
 

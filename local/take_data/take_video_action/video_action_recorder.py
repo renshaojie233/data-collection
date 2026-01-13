@@ -38,7 +38,7 @@ CAMERA_SERIAL_NUMBERS = [
 # 远程机器人配置
 REMOTE_HOST = "172.16.1.2"
 REMOTE_USER = "rsj"
-REMOTE_PASSWORD = "2064027038"
+REMOTE_PASSWORD = os.environ.get("REMOTE_PASSWORD", "")
 REMOTE_PORT = 9999
 REMOTE_ABSOLUTE_SCRIPT = "/home/rsj/gello_software/run_fr3_real_ros2_robotiq.sh"
 REMOTE_RELATIVE_SCRIPT = "/home/rsj/gello_software/start_relative_gello_control.sh"
@@ -516,13 +516,8 @@ class VideoActionRecorder:
         """确保远程回放脚本与目录存在"""
         # 检查远程回放脚本是否存在
         result = subprocess.run(
-            [
-                "sshpass",
-                "-p",
-                REMOTE_PASSWORD,
-                "ssh",
-                "-o",
-                "StrictHostKeyChecking=no",
+            self._ssh_base_cmd()
+            + [
                 f"{REMOTE_USER}@{REMOTE_HOST}",
                 f"test -f {REMOTE_REPLAY_SCRIPT} && echo 'exists' || echo 'missing'",
             ],
@@ -536,13 +531,8 @@ class VideoActionRecorder:
                 "请确认 franka_cpp_control 已部署"
             )
         subprocess.run(
-            [
-                "sshpass",
-                "-p",
-                REMOTE_PASSWORD,
-                "ssh",
-                "-o",
-                "StrictHostKeyChecking=no",
+            self._ssh_base_cmd()
+            + [
                 f"{REMOTE_USER}@{REMOTE_HOST}",
                 f"mkdir -p {REMOTE_REPLAY_DIR}",
             ],
@@ -614,16 +604,7 @@ class VideoActionRecorder:
             f"{shlex.quote(remote_json_path)}"
         )
         result = subprocess.run(
-            [
-                "sshpass",
-                "-p",
-                REMOTE_PASSWORD,
-                "ssh",
-                "-o",
-                "StrictHostKeyChecking=no",
-                f"{REMOTE_USER}@{REMOTE_HOST}",
-                cmd,
-            ],
+            self._ssh_base_cmd() + [f"{REMOTE_USER}@{REMOTE_HOST}", cmd],
             capture_output=True,
             text=True,
         )
@@ -634,16 +615,7 @@ class VideoActionRecorder:
     def _remote_process_exists(self, pattern):
         cmd = f"pgrep -f {shlex.quote(pattern)} >/dev/null 2>&1"
         result = subprocess.run(
-            [
-                "sshpass",
-                "-p",
-                REMOTE_PASSWORD,
-                "ssh",
-                "-o",
-                "StrictHostKeyChecking=no",
-                f"{REMOTE_USER}@{REMOTE_HOST}",
-                cmd,
-            ],
+            self._ssh_base_cmd() + [f"{REMOTE_USER}@{REMOTE_HOST}", cmd],
             capture_output=True,
             text=True,
             timeout=10,
@@ -694,16 +666,7 @@ class VideoActionRecorder:
             "pkill -f '[g]ello_relative_publisher' 2>/dev/null || true"
         )
         result = subprocess.run(
-            [
-                "sshpass",
-                "-p",
-                REMOTE_PASSWORD,
-                "ssh",
-                "-o",
-                "StrictHostKeyChecking=no",
-                f"{REMOTE_USER}@{REMOTE_HOST}",
-                cmd,
-            ],
+            self._ssh_base_cmd() + [f"{REMOTE_USER}@{REMOTE_HOST}", cmd],
             capture_output=True,
             text=True,
             timeout=15,
@@ -756,13 +719,8 @@ class VideoActionRecorder:
             replay_json = self._prepare_replay_json(local_json)
             self._ensure_remote_replay_script()
             subprocess.run(
-                [
-                    "sshpass",
-                    "-p",
-                    REMOTE_PASSWORD,
-                    "ssh",
-                    "-o",
-                    "StrictHostKeyChecking=no",
+                self._ssh_base_cmd()
+                + [
                     f"{REMOTE_USER}@{REMOTE_HOST}",
                     f"rm -rf {REMOTE_REPLAY_ACTION_DIR} {REMOTE_REPLAY_VIDEO_DIR} && "
                     f"mkdir -p {REMOTE_REPLAY_DIR}",
@@ -772,14 +730,9 @@ class VideoActionRecorder:
                 timeout=10,
             )
             subprocess.run(
-                [
-                    "sshpass",
-                    "-p",
-                    REMOTE_PASSWORD,
-                    "scp",
+                self._scp_base_cmd()
+                + [
                     "-r",
-                    "-o",
-                    "StrictHostKeyChecking=no",
                     action_dir,
                     f"{REMOTE_USER}@{REMOTE_HOST}:{REMOTE_REPLAY_DIR}",
                 ],
@@ -788,14 +741,9 @@ class VideoActionRecorder:
                 timeout=180,
             )
             subprocess.run(
-                [
-                    "sshpass",
-                    "-p",
-                    REMOTE_PASSWORD,
-                    "scp",
+                self._scp_base_cmd()
+                + [
                     "-r",
-                    "-o",
-                    "StrictHostKeyChecking=no",
                     video_dir,
                     f"{REMOTE_USER}@{REMOTE_HOST}:{REMOTE_REPLAY_DIR}",
                 ],
@@ -1809,18 +1757,21 @@ class VideoActionRecorder:
     def _get_remote_script_for_mode(self, control_mode):
         return REMOTE_RELATIVE_SCRIPT if control_mode == "relative" else REMOTE_ABSOLUTE_SCRIPT
 
+    def _ssh_base_cmd(self):
+        base = ["ssh", "-o", "StrictHostKeyChecking=no"]
+        if REMOTE_PASSWORD:
+            return ["sshpass", "-p", REMOTE_PASSWORD] + base
+        return base
+
+    def _scp_base_cmd(self):
+        base = ["scp", "-o", "StrictHostKeyChecking=no"]
+        if REMOTE_PASSWORD:
+            return ["sshpass", "-p", REMOTE_PASSWORD] + base
+        return base
+
     def _run_remote_command(self, command, timeout=10, check=False):
         return subprocess.run(
-            [
-                "sshpass",
-                "-p",
-                REMOTE_PASSWORD,
-                "ssh",
-                "-o",
-                "StrictHostKeyChecking=no",
-                f"{REMOTE_USER}@{REMOTE_HOST}",
-                command,
-            ],
+            self._ssh_base_cmd() + [f"{REMOTE_USER}@{REMOTE_HOST}", command],
             capture_output=True,
             text=True,
             timeout=timeout,
@@ -1972,16 +1923,14 @@ class VideoActionRecorder:
 
             # 创建远程目录
             subprocess.run([
-                "sshpass", "-p", REMOTE_PASSWORD,
-                "ssh", "-o", "StrictHostKeyChecking=no",
+                *self._ssh_base_cmd(),
                 f"{REMOTE_USER}@{REMOTE_HOST}",
                 f"mkdir -p {REMOTE_BRIDGE_DIR}"
             ], check=False, capture_output=True)
 
             # 上传桥接脚本
             subprocess.run([
-                "sshpass", "-p", REMOTE_PASSWORD,
-                "scp", "-o", "StrictHostKeyChecking=no",
+                *self._scp_base_cmd(),
                 bridge_script,
                 f"{REMOTE_USER}@{REMOTE_HOST}:{REMOTE_BRIDGE_DIR}/remote_data_bridge.py"
             ], check=False, capture_output=True)
@@ -1993,8 +1942,7 @@ class VideoActionRecorder:
             log_basename = os.path.splitext(os.path.basename(remote_script))[0]
             ros_cmd = f"nohup {remote_script} > /tmp/{log_basename}.log 2>&1 &"
             subprocess.Popen([
-                "sshpass", "-p", REMOTE_PASSWORD,
-                "ssh", "-o", "StrictHostKeyChecking=no",
+                *self._ssh_base_cmd(),
                 f"{REMOTE_USER}@{REMOTE_HOST}",
                 ros_cmd
             ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -2018,8 +1966,7 @@ class VideoActionRecorder:
                 "nohup python3 remote_data_bridge.py > /tmp/bridge.log 2>&1 &"
             )
             subprocess.Popen([
-                "sshpass", "-p", REMOTE_PASSWORD,
-                "ssh", "-o", "StrictHostKeyChecking=no",
+                *self._ssh_base_cmd(),
                 f"{REMOTE_USER}@{REMOTE_HOST}",
                 bridge_cmd
             ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -2592,8 +2539,7 @@ class VideoActionRecorder:
         try:
             print("清理远程进程...")
             subprocess.run([
-                "sshpass", "-p", REMOTE_PASSWORD,
-                "ssh", "-o", "StrictHostKeyChecking=no",
+                *self._ssh_base_cmd(),
                 f"{REMOTE_USER}@{REMOTE_HOST}",
                 "pkill -9 -f 'remote_data_bridge.py'; "
                 "pkill -9 -f 'run_fr3_real_ros2_robotiq.sh'; "

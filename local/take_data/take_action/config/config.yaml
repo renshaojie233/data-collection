@@ -4,7 +4,7 @@
 remote:
   host: "172.16.1.2"
   user: "rsj"
-  password: "2064027038"
+  password: ""
   port: 22
 
 # ROS2 settings
