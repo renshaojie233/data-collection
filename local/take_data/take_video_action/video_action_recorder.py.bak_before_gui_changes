@@ -1,0 +1,1413 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+视频+动作数据同步录制系统
+Integrated Video and Robot Action Recording System
+"""
+
+import cv2
+import pyrealsense2 as rs
+import time
+import numpy as np
+import os
+import socket
+import json
+import h5py
+from datetime import datetime
+import tkinter as tk
+from tkinter import messagebox, font as tkfont
+import threading
+from PIL import Image, ImageTk
+import subprocess
+import signal
+import sys
+import atexit
+import math
+from collections import deque
+
+# 相机序列号
+CAMERA_SERIAL_NUMBERS = [
+    '243722070232',  # 相机1
+    '243622073040',  # 相机2
+    '243722073691'   # 相机3
+]
+
+# 远程机器人配置
+REMOTE_HOST = "172.16.1.2"
+REMOTE_USER = "rsj"
+REMOTE_PASSWORD = "2064027038"
+REMOTE_PORT = 9999
+REMOTE_SCRIPT = "/home/rsj/gello_software/run_fr3_real_ros2.sh"
+REMOTE_BRIDGE_DIR = "/tmp/robot_data_bridge"
+
+
+class VideoActionRecorder:
+    def __init__(self):
+        # 基础路径
+        self.base_path = "/home/ubuntu/take_data/data"
+        self.video_base_path = os.path.join(self.base_path, "video")
+        self.action_base_path = os.path.join(self.base_path, "action")
+        os.makedirs(self.video_base_path, exist_ok=True)
+        os.makedirs(self.action_base_path, exist_ok=True)
+
+        # 录制状态
+        self.is_recording = False
+        self.running = True
+        self.session_dir = None
+        self.session_index = None
+        self.record_start_time = None
+
+        # 视频相关
+        self.pipelines = []
+        self.video_writers = []
+        self.frame_lock = threading.Lock()
+
+        # 动作数据相关
+        self.action_socket = None
+        self.action_data_buffer = []
+        self.action_thread = None
+        self.robot_ready = False
+        self.latest_action_data = None
+        self._action_redraw_pending = False
+        self.action_redraw_interval_ms = 80
+        self.action_history = deque()
+        self.action_history_lock = threading.Lock()
+        self.history_window_sec = 10.0
+        self.preview_size = (0, 0)
+        self.ui_state_path = os.path.join(
+            os.path.expanduser("~"),
+            ".config",
+            "video_action_recorder",
+            "ui_state.json"
+        )
+        self.ui_state = self.load_ui_state()
+        self._splitter_restored = False
+
+        # 创建GUI
+        self.create_gui()
+
+        # 初始化相机
+        self.init_cameras()
+
+        # 设置清理钩子
+        self.setup_cleanup_hooks()
+
+        # 开始预览
+        self.start_preview()
+
+        # 启动远程数据流
+        self.start_action_stream()
+
+    def get_chinese_font(self, size, weight="normal"):
+        """获取中文字体"""
+        if not hasattr(self, "_font_cache"):
+            self._font_cache = {}
+
+        cache_key = (size, weight)
+        if cache_key in self._font_cache:
+            return self._font_cache[cache_key]
+
+        if not hasattr(self, "_font_family"):
+            available = set(tkfont.families(self.root))
+            preferred = [
+                "Noto Sans CJK SC",
+                "WenQuanYi Micro Hei",
+                "Droid Sans Fallback",
+                "fangsong ti",
+                "song ti",
+                "gothic",
+                "mincho"
+            ]
+            self._font_family = next((f for f in preferred if f in available), None)
+
+        if self._font_family:
+            font_obj = tkfont.Font(
+                root=self.root,
+                family=self._font_family,
+                size=size,
+                weight=weight
+            )
+            actual = font_obj.actual()
+            if actual.get("family") != self._font_family:
+                font_obj = tkfont.Font(
+                    root=self.root,
+                    family=self._font_family,
+                    size=size,
+                    weight="normal"
+                )
+        else:
+            font_obj = tkfont.Font(root=self.root, size=size, weight=weight)
+        self._font_cache[cache_key] = font_obj
+        return font_obj
+
+    def setup_cleanup_hooks(self):
+        """设置清理钩子，确保程序退出时清理远程进程"""
+        atexit.register(self.cleanup_remote_processes)
+        signal.signal(signal.SIGINT, self._signal_handler)
+        signal.signal(signal.SIGTERM, self._signal_handler)
+
+    def _signal_handler(self, sig, frame):
+        """信号处理器"""
+        print("\n接收到退出信号，正在清理...")
+        self.cleanup_and_exit()
+
+    def load_ui_state(self):
+        """加载界面布局状态"""
+        try:
+            if os.path.exists(self.ui_state_path):
+                with open(self.ui_state_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if isinstance(data, dict):
+                    return data
+        except Exception:
+            pass
+        return {}
+
+    def _set_label_text(self, label, text, fg=None):
+        """线程安全更新标签文字"""
+        def _update():
+            if fg is None:
+                label.config(text=text)
+            else:
+                label.config(text=text, fg=fg)
+
+        try:
+            self.root.after(0, _update)
+        except Exception:
+            pass
+
+    def _on_content_resize(self, event):
+        """保持上下区域50/50高度"""
+        total = event.height
+        if total <= 0:
+            return
+        half = max(int(total / 2), 1)
+        event.widget.grid_rowconfigure(0, minsize=half)
+        event.widget.grid_rowconfigure(1, minsize=half)
+
+    def _build_action_canvases(self):
+        """创建动作曲线画布"""
+        self.action_canvases = []
+        self.action_canvas_specs = [
+            {"key": "pos_x", "title": "位置 X (m)", "color": "#e74c3c", "ymin": -1.0, "ymax": 1.0, "min_span": 0.02},
+            {"key": "pos_y", "title": "位置 Y (m)", "color": "#2ecc71", "ymin": -1.0, "ymax": 1.0, "min_span": 0.02},
+            {"key": "pos_z", "title": "位置 Z (m)", "color": "#3498db", "ymin": -1.0, "ymax": 1.0, "min_span": 0.02},
+            {"key": "grip", "title": "夹爪开合 (m)", "color": "#ecf0f1", "ymin": 0.0, "ymax": 0.08, "min_span": 0.01},
+            {"key": "ori_x", "title": "姿态 Qx", "color": "#9b59b6", "ymin": -1.0, "ymax": 1.0, "min_span": 0.1},
+            {"key": "ori_y", "title": "姿态 Qy", "color": "#1abc9c", "ymin": -1.0, "ymax": 1.0, "min_span": 0.1},
+            {"key": "ori_z", "title": "姿态 Qz", "color": "#f1c40f", "ymin": -1.0, "ymax": 1.0, "min_span": 0.1},
+            {"key": "ori_w", "title": "姿态 Qw", "color": "#e67e22", "ymin": -1.0, "ymax": 1.0, "min_span": 0.1},
+        ]
+
+        cols = 2
+        rows = (len(self.action_canvas_specs) + cols - 1) // cols
+        for i in range(len(self.action_canvas_specs)):
+            canvas = tk.Canvas(self.action_canvas_frame, bg="#1f2d3a", highlightthickness=0)
+            row = i % rows
+            col = i // rows
+            canvas.grid(row=row, column=col, sticky="nsew", padx=4, pady=4)
+            self.action_canvas_frame.grid_rowconfigure(row, weight=1)
+            self.action_canvases.append(canvas)
+        for col in range(cols):
+            self.action_canvas_frame.grid_columnconfigure(col, weight=1)
+
+    def _compute_series_range(self, points, default_min, default_max, min_span):
+        """根据数据自动计算显示范围"""
+        min_v = None
+        max_v = None
+        for _, v in points:
+            try:
+                v = float(v)
+            except Exception:
+                continue
+            if min_v is None or v < min_v:
+                min_v = v
+            if max_v is None or v > max_v:
+                max_v = v
+        if min_v is None or max_v is None:
+            return default_min, default_max
+
+        span = max_v - min_v
+        if span < min_span:
+            center = (min_v + max_v) / 2
+            span = min_span
+            min_v = center - span / 2
+            max_v = center + span / 2
+        else:
+            pad = span * 0.1
+            min_v -= pad
+            max_v += pad
+        return min_v, max_v
+
+    def save_ui_state(self):
+        """保存界面布局状态"""
+        try:
+            os.makedirs(os.path.dirname(self.ui_state_path), exist_ok=True)
+            with open(self.ui_state_path, "w", encoding="utf-8") as f:
+                json.dump(self.ui_state, f, indent=2, ensure_ascii=False)
+        except Exception:
+            pass
+
+    def _get_split_ratio(self):
+        """获取分割条当前位置占比"""
+        try:
+            total = self.main_paned.winfo_height()
+            if total <= 0:
+                return None
+            _, sash_y = self.main_paned.sash_coord(0)
+            ratio = sash_y / total
+            return max(0.2, min(0.85, ratio))
+        except Exception:
+            return None
+
+    def _apply_split_ratio(self, ratio):
+        """按占比设置分割条位置"""
+        try:
+            total = self.main_paned.winfo_height()
+            if total <= 0:
+                return
+            sash_y = int(total * ratio)
+            self.main_paned.sash_place(0, 0, sash_y)
+        except Exception:
+            pass
+
+    def _restore_splitter(self):
+        """恢复分割条位置"""
+        ratio = self.ui_state.get("split_ratio", 0.75)
+        self._apply_split_ratio(ratio)
+
+    def _on_splitter_release(self, event):
+        """拖动分割条后自动保存"""
+        ratio = self._get_split_ratio()
+        if ratio is not None:
+            self.ui_state["split_ratio"] = ratio
+            self.save_ui_state()
+
+    def _on_paned_configure(self, event):
+        """首次布局完成后恢复分割条位置"""
+        if not self._splitter_restored:
+            self._splitter_restored = True
+            self._restore_splitter()
+
+    def start_action_stream(self):
+        """启动远程系统并持续接收动作数据（后台运行）"""
+        def background_start():
+            if self.robot_ready and self.action_socket:
+                return
+            if not self.start_remote_robot():
+                return
+            if not self.action_thread or not self.action_thread.is_alive():
+                self.action_thread = threading.Thread(target=self.receive_action_data, daemon=True)
+                self.action_thread.start()
+
+        # 在后台线程启动，不阻塞GUI
+        startup_thread = threading.Thread(target=background_start, daemon=True)
+        startup_thread.start()
+
+    def create_gui(self):
+        """创建GUI界面"""
+        self.root = tk.Tk()
+        self.root.title("视频+动作数据同步录制系统")
+        screen_w = self.root.winfo_screenwidth()
+        screen_h = self.root.winfo_screenheight()
+        window_w = min(1920, max(1, screen_w - 40))
+        window_h = max(1, screen_h - 40)
+        self.root.geometry(f"{window_w}x{window_h}")
+        self.root.configure(bg="#2c3e50")
+
+        # 设置窗口关闭协议
+        self.root.protocol("WM_DELETE_WINDOW", self.on_window_close)
+
+        # 字体
+        self.font_title = self.get_chinese_font(20, "bold")
+        self.font_large = self.get_chinese_font(16, "bold")
+        self.font_medium = self.get_chinese_font(13)
+        self.font_small = self.get_chinese_font(11)
+        self.font_tiny = self.get_chinese_font(10)
+
+        # ====================
+        # 中间内容区域
+        # ====================
+        content_frame = tk.Frame(self.root, bg="#2c3e50")
+        content_frame.pack(fill="both", expand=True, padx=8, pady=8)
+        content_frame.grid_rowconfigure(0, weight=1, uniform="main")
+        content_frame.grid_rowconfigure(1, weight=1, uniform="main")
+        content_frame.grid_columnconfigure(0, weight=1)
+        content_frame.bind("<Configure>", self._on_content_resize)
+
+        # 上方：预览区域
+        video_frame = tk.Frame(content_frame, bg="#34495e", relief="raised", borderwidth=2)
+        video_frame.grid(row=0, column=0, sticky="nsew")
+        video_frame.grid_rowconfigure(0, weight=0)
+        video_frame.grid_rowconfigure(1, weight=1)
+        video_frame.grid_columnconfigure(0, weight=1)
+
+        preview_title = tk.Label(
+            video_frame,
+            text="实时预览（三相机拼接）",
+            font=self.font_large,
+            fg="white",
+            bg="#34495e"
+        )
+        preview_title.grid(row=0, column=0, pady=6)
+
+        preview_container = tk.Frame(video_frame, bg="#34495e")
+        preview_container.grid(row=1, column=0, sticky="nsew", padx=8, pady=(0, 8))
+
+        # 预览画布
+        self.preview_label = tk.Label(preview_container, bg="#34495e", anchor="center")
+        self.preview_label.place(relx=0, rely=0, relwidth=1, relheight=1)
+        self.preview_label.bind("<Configure>", self._on_preview_resize)
+
+        # 下方：动作可视化 + 控制面板
+        bottom_frame = tk.Frame(content_frame, bg="#2c3e50")
+        bottom_frame.grid(row=1, column=0, sticky="nsew")
+        bottom_frame.grid_rowconfigure(0, weight=1)
+        bottom_frame.grid_columnconfigure(0, weight=1)
+        bottom_frame.grid_columnconfigure(1, weight=0, minsize=420)
+
+        action_frame = tk.Frame(bottom_frame, bg="#34495e", relief="raised", borderwidth=2)
+        action_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 5))
+        action_frame.grid_rowconfigure(0, weight=0)
+        action_frame.grid_rowconfigure(1, weight=1)
+        action_frame.grid_columnconfigure(0, weight=1)
+
+        action_title = tk.Label(
+            action_frame,
+            text="动作可视化",
+            font=self.font_large,
+            fg="white",
+            bg="#34495e"
+        )
+        action_title.grid(row=0, column=0, pady=6)
+
+        self.action_canvas_frame = tk.Frame(action_frame, bg="#1f2d3a")
+        self.action_canvas_frame.grid(row=1, column=0, sticky="nsew", padx=8, pady=(0, 8))
+        self._build_action_canvases()
+        self._schedule_action_redraw()
+
+        # 右下：控制区域
+        right_frame = tk.Frame(bottom_frame, bg="#34495e", relief="raised", borderwidth=2, width=420)
+        right_frame.grid(row=0, column=1, sticky="nsew", padx=(5, 0))
+        right_frame.grid_propagate(False)
+
+        control_title = tk.Label(
+            right_frame,
+            text="控制面板",
+            font=self.font_large,
+            fg="white",
+            bg="#34495e"
+        )
+        control_title.pack(pady=12)
+
+        # ====================
+        # 系统状态框
+        # ====================
+        status_frame = tk.LabelFrame(
+            right_frame,
+            text="系统状态",
+            font=self.font_medium,
+            fg="white",
+            bg="#34495e",
+            padx=15,
+            pady=10
+        )
+        status_frame.pack(padx=15, pady=8, fill="x")
+
+        # 相机状态
+        self.camera_status_label = tk.Label(
+            status_frame,
+            text="相机: 初始化中...",
+            font=self.font_small,
+            fg="#f39c12",
+            bg="#34495e",
+            anchor="w"
+        )
+        self.camera_status_label.pack(fill="x", pady=2)
+
+        # 机器人连接状态
+        self.robot_connection_label = tk.Label(
+            status_frame,
+            text="机器人连接: 未连接",
+            font=self.font_small,
+            fg="#95a5a6",
+            bg="#34495e",
+            anchor="w"
+        )
+        self.robot_connection_label.pack(fill="x", pady=2)
+
+        # 机器人准备状态
+        self.robot_ready_label = tk.Label(
+            status_frame,
+            text="机器人状态: 待机中",
+            font=self.font_small,
+            fg="#95a5a6",
+            bg="#34495e",
+            anchor="w"
+        )
+        self.robot_ready_label.pack(fill="x", pady=2)
+
+        # 录制状态
+        self.status_label = tk.Label(
+            status_frame,
+            text="录制状态: 等待录制",
+            font=self.font_small,
+            fg="#27ae60",
+            bg="#34495e",
+            anchor="w"
+        )
+        self.status_label.pack(fill="x", pady=2)
+
+        # ====================
+        # 录制信息框
+        # ====================
+        info_frame = tk.LabelFrame(
+            right_frame,
+            text="录制信息",
+            font=self.font_medium,
+            fg="white",
+            bg="#34495e",
+            padx=15,
+            pady=10
+        )
+        info_frame.pack(padx=15, pady=8, fill="x")
+
+        # 录制时长
+        self.time_label = tk.Label(
+            info_frame,
+            text="录制时长: 00:00:00",
+            font=self.font_medium,
+            fg="white",
+            bg="#34495e",
+            anchor="w"
+        )
+        self.time_label.pack(fill="x", pady=2)
+
+        # 录制序号
+        self.session_label = tk.Label(
+            info_frame,
+            text="录制序号: --",
+            font=self.font_small,
+            fg="#ecf0f1",
+            bg="#34495e",
+            anchor="w"
+        )
+        self.session_label.pack(fill="x", pady=2)
+
+        # 保存路径
+        self.path_title_label = tk.Label(
+            info_frame,
+            text="保存路径:",
+            font=self.font_small,
+            fg="#95a5a6",
+            bg="#34495e",
+            anchor="w"
+        )
+        self.path_title_label.pack(fill="x", pady=(6, 2))
+
+        self.video_path_label = tk.Label(
+            info_frame,
+            text="视频: data/video/record_XXX/",
+            font=self.font_small,
+            fg="#95a5a6",
+            bg="#34495e",
+            anchor="w"
+        )
+        self.video_path_label.pack(fill="x", pady=2)
+
+        self.action_path_label = tk.Label(
+            info_frame,
+            text="动作: data/action/record_XXX/",
+            font=self.font_small,
+            fg="#95a5a6",
+            bg="#34495e",
+            anchor="w"
+        )
+        self.action_path_label.pack(fill="x", pady=(2, 4))
+
+        # ====================
+        # 控制按钮区域
+        # ====================
+        button_frame = tk.Frame(right_frame, bg="#34495e")
+        button_frame.pack(pady=12, padx=15, fill="x")
+
+        # 开始录制按钮
+        self.start_button = tk.Button(
+            button_frame,
+            text="开始录制",
+            font=self.font_large,
+            bg="#27ae60",
+            fg="white",
+            width=20,
+            height=2,
+            command=self.start_recording,
+            cursor="hand2",
+            relief="raised",
+            borderwidth=3
+        )
+        self.start_button.pack(pady=6)
+
+        # 停止录制按钮
+        self.stop_button = tk.Button(
+            button_frame,
+            text="停止录制",
+            font=self.font_large,
+            bg="#e74c3c",
+            fg="white",
+            width=20,
+            height=2,
+            state=tk.DISABLED,
+            command=self.stop_recording,
+            cursor="hand2",
+            relief="raised",
+            borderwidth=3
+        )
+        self.stop_button.pack(pady=6)
+
+
+    def init_cameras(self):
+        """初始化所有相机"""
+        try:
+            for sn in CAMERA_SERIAL_NUMBERS:
+                pipeline = rs.pipeline()
+                config = rs.config()
+                config.enable_device(sn)
+                config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+                pipeline.start(config)
+                self.pipelines.append(pipeline)
+                print(f"相机 {sn} 初始化成功")
+
+            self.camera_status_label.config(
+                text=f"相机: 已连接 {len(CAMERA_SERIAL_NUMBERS)} 台",
+                fg="#27ae60"
+            )
+        except Exception as e:
+            self.camera_status_label.config(
+                text=f"相机: 初始化失败 {str(e)}",
+                fg="#e74c3c"
+            )
+            messagebox.showerror("错误", f"相机初始化失败: {str(e)}")
+
+    def start_preview(self):
+        """开始视频预览"""
+        def preview_loop():
+            last_update_time = 0
+            update_interval = 1.0 / 30  # 30 FPS
+
+            while self.running:
+                current_time = time.time()
+
+                # 控制帧率
+                if current_time - last_update_time < update_interval:
+                    time.sleep(0.001)
+                    continue
+
+                images = []
+                valid = True
+
+                try:
+                    # 从所有相机获取帧
+                    for i, pipeline in enumerate(self.pipelines):
+                        frames = pipeline.wait_for_frames()
+                        color_frame = frames.get_color_frame()
+                        if not color_frame:
+                            valid = False
+                            break
+                        color_image = np.asanyarray(color_frame.get_data())
+
+                        # 如果正在录制，先保存原始视频帧（无REC标识）
+                        if self.is_recording and i < len(self.video_writers):
+                            self.video_writers[i].write(color_image)
+
+                        # 为预览添加录制标识（不影响保存的视频）
+                        if self.is_recording:
+                            cv2.circle(color_image, (30, 30), 15, (0, 0, 255), -1)
+                            cv2.putText(color_image, "REC", (55, 40),
+                                      cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+
+                        images.append(color_image)
+
+                    if valid and len(images) == 3:
+                        # 水平拼接三张图像
+                        combined = cv2.hconcat(images)
+
+                        # 转换为RGB用于显示
+                        combined_rgb = cv2.cvtColor(combined, cv2.COLOR_BGR2RGB)
+
+                        # 转换为PIL Image
+                        pil_img = Image.fromarray(combined_rgb)
+
+                        # 在主线程中更新GUI
+                        with self.frame_lock:
+                            self.root.after(0, self.update_preview_label, pil_img)
+
+                        last_update_time = current_time
+
+                except Exception as e:
+                    print(f"预览错误: {e}")
+                    time.sleep(0.1)
+
+        preview_thread = threading.Thread(target=preview_loop, daemon=True)
+        preview_thread.start()
+
+    def _on_preview_resize(self, event):
+        """缓存预览区域尺寸，避免线程中调用Tk方法"""
+        if event.width > 0 and event.height > 0:
+            self.preview_size = (event.width, event.height)
+
+    def update_preview_label(self, pil_img):
+        """在主线程中更新预览标签"""
+        try:
+            target_w, target_h = self.preview_size
+            if target_w <= 0 or target_h <= 0:
+                return
+
+            img_w, img_h = pil_img.size
+            scale = min(target_w / img_w, target_h / img_h)
+            new_w = max(int(img_w * scale), 1)
+            new_h = max(int(img_h * scale), 1)
+            if new_w != img_w or new_h != img_h:
+                pil_img = pil_img.resize((new_w, new_h), Image.LANCZOS)
+            imgtk = ImageTk.PhotoImage(image=pil_img)
+            self.preview_label.imgtk = imgtk
+            self.preview_label.configure(image=imgtk)
+        except:
+            pass
+
+    def request_action_redraw(self):
+        """请求动作可视化刷新"""
+        return
+
+    def _schedule_action_redraw(self):
+        """按固定间隔刷新动作曲线，避免高频触发导致卡顿"""
+        if self._action_redraw_pending:
+            return
+        self._action_redraw_pending = True
+        try:
+            self.root.after(self.action_redraw_interval_ms, self._action_redraw_loop)
+        except Exception:
+            self._action_redraw_pending = False
+
+    def _action_redraw_loop(self):
+        """动作曲线刷新循环"""
+        self._action_redraw_pending = False
+        self.update_action_canvas()
+        if self.running:
+            self._schedule_action_redraw()
+
+    def _extract_gripper_width(self, joint_names, positions):
+        """提取夹爪开合"""
+        if not joint_names or not positions:
+            return None
+        indices = [
+            i for i, name in enumerate(joint_names)
+            if "finger" in name or "gripper" in name
+        ]
+        if not indices:
+            return None
+        try:
+            if len(indices) >= 2:
+                return float(positions[indices[0]]) + float(positions[indices[1]])
+            return float(positions[indices[0]])
+        except Exception:
+            return None
+
+    def _append_action_history(self, data):
+        """追加动作历史数据"""
+        try:
+            ts = data.get('timestamp') or time.time()
+            franka = data.get('franka_joints') or {}
+            joints = franka.get('position') or []
+
+            # 从gripper_joints获取夹爪数据
+            gripper_data = data.get('gripper_joints') or {}
+            gripper_positions = gripper_data.get('position') or []
+            gripper_names = gripper_data.get('names')
+            gripper = self._extract_gripper_width(gripper_names, gripper_positions)
+
+            ee = data.get('end_effector_pose') or {}
+            pos = ee.get('position') or {}
+            ori = ee.get('orientation') or {}
+
+            sample = {
+                "t": float(ts),
+                "joints": list(joints[:7]) if joints else [],
+                "pos": (
+                    float(pos.get('x', 0.0)),
+                    float(pos.get('y', 0.0)),
+                    float(pos.get('z', 0.0))
+                ),
+                "ori": (
+                    float(ori.get('x', 0.0)),
+                    float(ori.get('y', 0.0)),
+                    float(ori.get('z', 0.0)),
+                    float(ori.get('w', 0.0))
+                ),
+                "gripper": None if gripper is None else float(gripper)
+            }
+        except Exception:
+            return
+
+        with self.action_history_lock:
+            self.action_history.append(sample)
+    def _draw_time_series_canvas(self, canvas, title, points, color, y_min, y_max, t0, t1, show_time=False, time_text=None):
+        """绘制单条时间序列"""
+        canvas.delete("all")
+        w = canvas.winfo_width()
+        h = canvas.winfo_height()
+        if w <= 10 or h <= 10:
+            return
+
+        pad = 6
+        canvas.create_text(
+            pad, pad,
+            anchor="nw",
+            text=title,
+            font=self.font_small,
+            fill="#ecf0f1"
+        )
+        if show_time and time_text:
+            canvas.create_text(
+                w - pad, pad,
+                anchor="ne",
+                text=f"时间: {time_text}",
+                font=self.font_small,
+                fill="#bdc3c7"
+            )
+
+        title_h = 18
+        left_pad = 40
+        right_pad = 10
+        top = pad + title_h
+        bottom = h - pad
+        left = pad + left_pad
+        right = w - right_pad
+        if bottom <= top or right <= left:
+            return
+
+        canvas.create_rectangle(
+            left, top,
+            right, bottom,
+            outline="#3b5166",
+            fill="#1f2d3a"
+        )
+
+        if y_max <= y_min:
+            return
+
+        if y_min < 0 < y_max:
+            zero_y = top + (1.0 - ((0 - y_min) / (y_max - y_min))) * (bottom - top)
+            canvas.create_line(left, zero_y, right, zero_y, fill="#7f8c8d")
+
+        canvas.create_text(
+            pad, top - 2,
+            anchor="nw",
+            text=f"{y_max:.2f}",
+            font=self.font_tiny,
+            fill="#bdc3c7"
+        )
+        canvas.create_text(
+            pad, bottom - 12,
+            anchor="nw",
+            text=f"{y_min:.2f}",
+            font=self.font_tiny,
+            fill="#bdc3c7"
+        )
+
+        if not points:
+            return
+
+        window = max(t1 - t0, 1e-6)
+        width = right - left
+        height = bottom - top
+
+        max_points = 240
+        step = max(1, len(points) // max_points)
+        coords = []
+        for t, v in points[::step]:
+            if t < t0 or t > t1:
+                continue
+            try:
+                v = float(v)
+            except Exception:
+                continue
+            x_pos = left + ((t - t0) / window) * width
+            y_pos = top + (1.0 - ((v - y_min) / (y_max - y_min))) * height
+            coords.extend([x_pos, y_pos])
+
+        if len(coords) >= 4:
+            canvas.create_line(coords, fill=color, width=1.5)
+
+    def update_action_canvas(self):
+        """更新动作可视化"""
+        if not self.action_canvases:
+            return
+        if not self.action_canvases[0].winfo_exists():
+            return
+
+        with self.action_history_lock:
+            if self.action_history:
+                t1 = self.action_history[-1]["t"]
+            else:
+                t1 = time.time()
+            t0 = t1 - self.history_window_sec
+            while self.action_history and self.action_history[0]["t"] < t0:
+                self.action_history.popleft()
+            samples = list(self.action_history)
+
+        if not samples:
+            for canvas in self.action_canvases:
+                canvas.delete("all")
+                w = canvas.winfo_width()
+                h = canvas.winfo_height()
+                if w <= 10 or h <= 10:
+                    continue
+                canvas.create_text(
+                    w / 2, h / 2,
+                    text="等待动作数据...",
+                    font=self.font_medium,
+                    fill="#bdc3c7"
+                )
+            return
+
+        time_text = time.strftime("%H:%M:%S", time.localtime(t1))
+        series_map = {
+            "pos_x": [],
+            "pos_y": [],
+            "pos_z": [],
+            "ori_x": [],
+            "ori_y": [],
+            "ori_z": [],
+            "ori_w": [],
+            "grip": []
+        }
+
+        for sample in samples:
+            t = sample.get("t")
+            if t is None:
+                continue
+            pos = sample.get("pos") or (0.0, 0.0, 0.0)
+            ori = sample.get("ori") or (0.0, 0.0, 0.0, 1.0)
+            grip = sample.get("gripper")
+
+            series_map["pos_x"].append((t, pos[0]))
+            series_map["pos_y"].append((t, pos[1]))
+            series_map["pos_z"].append((t, pos[2]))
+            series_map["ori_x"].append((t, ori[0]))
+            series_map["ori_y"].append((t, ori[1]))
+            series_map["ori_z"].append((t, ori[2]))
+            series_map["ori_w"].append((t, ori[3]))
+            if grip is not None:
+                series_map["grip"].append((t, grip))
+
+        for idx, spec in enumerate(self.action_canvas_specs):
+            canvas = self.action_canvases[idx]
+            key = spec["key"]
+            points = series_map.get(key, [])
+            y_min, y_max = self._compute_series_range(
+                points,
+                spec["ymin"],
+                spec["ymax"],
+                spec["min_span"]
+            )
+            show_time = idx == 0
+            self._draw_time_series_canvas(
+                canvas,
+                spec["title"],
+                points,
+                spec["color"],
+                y_min,
+                y_max,
+                t0,
+                t1,
+                show_time=show_time,
+                time_text=time_text
+            )
+
+    def get_next_record_index(self):
+        """获取下一个录制序号"""
+        max_index = 0
+
+        # 检查video目录
+        if os.path.exists(self.video_base_path):
+            for name in os.listdir(self.video_base_path):
+                if name.startswith("record_"):
+                    try:
+                        idx = int(name.split("_")[1])
+                        max_index = max(max_index, idx)
+                    except:
+                        pass
+
+        # 检查action目录
+        if os.path.exists(self.action_base_path):
+            for name in os.listdir(self.action_base_path):
+                if name.startswith("record_"):
+                    try:
+                        idx = int(name.split("_")[1])
+                        max_index = max(max_index, idx)
+                    except:
+                        pass
+
+        return max_index + 1
+
+    def start_remote_robot(self):
+        """启动远程机器人系统"""
+        try:
+            print("启动远程ROS2系统...")
+            self._set_label_text(self.robot_connection_label, "机器人连接: 正在连接...", "#f39c12")
+            self._set_label_text(self.robot_ready_label, "机器人状态: 清理旧进程...", "#f39c12")
+
+            # 先清理所有旧的远程进程，确保干净的启动状态
+            print("清理所有旧的远程进程...")
+            subprocess.run([
+                "sshpass", "-p", REMOTE_PASSWORD,
+                "ssh", "-o", "StrictHostKeyChecking=no",
+                f"{REMOTE_USER}@{REMOTE_HOST}",
+                "pkill -9 -f 'remote_data_bridge.py' 2>/dev/null; "
+                "pkill -9 -f 'run_fr3_real_ros2.sh' 2>/dev/null; "
+                "true"
+            ], check=False, capture_output=True, timeout=5)
+            time.sleep(2)
+
+            # 上传数据桥接脚本
+            bridge_script = "/home/ubuntu/take_data/take_action/scripts/remote_data_bridge.py"
+
+            # 创建远程目录
+            subprocess.run([
+                "sshpass", "-p", REMOTE_PASSWORD,
+                "ssh", "-o", "StrictHostKeyChecking=no",
+                f"{REMOTE_USER}@{REMOTE_HOST}",
+                f"mkdir -p {REMOTE_BRIDGE_DIR}"
+            ], check=False, capture_output=True)
+
+            # 上传桥接脚本
+            subprocess.run([
+                "sshpass", "-p", REMOTE_PASSWORD,
+                "scp", "-o", "StrictHostKeyChecking=no",
+                bridge_script,
+                f"{REMOTE_USER}@{REMOTE_HOST}:{REMOTE_BRIDGE_DIR}/remote_data_bridge.py"
+            ], check=False, capture_output=True)
+
+            # 启动ROS2系统（每次都重新启动，确保状态干净）
+            self._set_label_text(self.robot_ready_label, "机器人状态: 启动ROS2系统...", "#f39c12")
+
+            ros_cmd = f"nohup {REMOTE_SCRIPT} > /tmp/run_fr3_real_ros2.log 2>&1 &"
+            subprocess.Popen([
+                "sshpass", "-p", REMOTE_PASSWORD,
+                "ssh", "-o", "StrictHostKeyChecking=no",
+                f"{REMOTE_USER}@{REMOTE_HOST}",
+                ros_cmd
+            ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+            # 等待ROS2启动，显示倒计时
+            for i in range(15, 0, -1):
+                self._set_label_text(
+                    self.robot_ready_label,
+                    f"机器人状态: ROS2启动中 ({i}秒)...",
+                    "#f39c12"
+                )
+                time.sleep(1)
+
+            # 启动数据桥接
+            self._set_label_text(self.robot_ready_label, "机器人状态: 启动数据桥接...", "#f39c12")
+            bridge_cmd = (
+                f"cd {REMOTE_BRIDGE_DIR} && "
+                "source /opt/ros/humble/setup.bash && "
+                "source ~/franka_ros2_ws/install/setup.bash && "
+                "source ~/gello_software/ros2/install/setup.bash && "
+                "nohup python3 remote_data_bridge.py > /tmp/bridge.log 2>&1 &"
+            )
+            subprocess.Popen([
+                "sshpass", "-p", REMOTE_PASSWORD,
+                "ssh", "-o", "StrictHostKeyChecking=no",
+                f"{REMOTE_USER}@{REMOTE_HOST}",
+                bridge_cmd
+            ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+            # 等待桥接启动
+            for i in range(5, 0, -1):
+                self._set_label_text(
+                    self.robot_ready_label,
+                    f"机器人状态: 桥接启动中 ({i}秒)...",
+                    "#f39c12"
+                )
+                time.sleep(1)
+
+            # 连接到数据桥接（带重试机制）
+            self._set_label_text(self.robot_ready_label, "机器人状态: 连接数据流...", "#f39c12")
+
+            self.action_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.action_socket.settimeout(2)  # 设置2秒超时
+
+            # 重试连接最多10次，每次间隔1秒
+            connected = False
+            for attempt in range(10):
+                try:
+                    self.action_socket.connect((REMOTE_HOST, REMOTE_PORT))
+                    connected = True
+                    break
+                except (socket.timeout, ConnectionRefusedError, OSError) as e:
+                    if attempt < 9:  # 不是最后一次尝试
+                        self._set_label_text(
+                            self.robot_ready_label,
+                            f"机器人状态: 连接中... ({attempt+1}/10)",
+                            "#f39c12"
+                        )
+                        time.sleep(1)
+                        if self.action_socket:
+                            self.action_socket.close()
+                        self.action_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                        self.action_socket.settimeout(2)
+                    else:
+                        raise e
+
+            if not connected:
+                raise Exception("无法连接到数据桥接服务器")
+
+            self.action_socket.settimeout(None)  # 恢复为阻塞模式
+
+            self._set_label_text(self.robot_connection_label, "机器人连接: 已连接", "#27ae60")
+            self._set_label_text(self.robot_ready_label, "机器人状态: 等待数据...", "#f39c12")
+            print("远程机器人系统启动成功")
+            return True
+
+        except Exception as e:
+            if self.action_socket:
+                try:
+                    self.action_socket.close()
+                except Exception:
+                    pass
+                self.action_socket = None
+            self._set_label_text(self.robot_connection_label, "机器人连接: 连接失败", "#e74c3c")
+            self._set_label_text(self.robot_ready_label, f"机器人状态: {str(e)}", "#e74c3c")
+            self.robot_ready = False
+            print(f"远程机器人启动失败: {e}")
+            return False
+
+    def receive_action_data(self):
+        """接收动作数据"""
+        buffer = ''
+        while self.running and self.action_socket:
+            try:
+                chunk = self.action_socket.recv(4096).decode('utf-8')
+                if not chunk:
+                    break
+
+                buffer += chunk
+
+                while '\n' in buffer:
+                    line, buffer = buffer.split('\n', 1)
+                    if line.strip():
+                        try:
+                            data = json.loads(line)
+                            self.latest_action_data = data
+                            self._append_action_history(data)
+                            self.request_action_redraw()
+                            if not self.robot_ready:
+                                self.robot_ready = True
+                                self._set_label_text(
+                                    self.robot_ready_label,
+                                    "机器人状态: 就绪",
+                                    "#27ae60"
+                                )
+                            if self.is_recording:
+                                self.action_data_buffer.append(data)
+                        except json.JSONDecodeError:
+                            pass
+
+            except Exception as e:
+                print(f"接收数据错误: {e}")
+                break
+        try:
+            if self.action_socket:
+                self.action_socket.close()
+        except Exception:
+            pass
+        self.action_socket = None
+        self.robot_ready = False
+        self._set_label_text(self.robot_connection_label, "机器人连接: 未连接", "#95a5a6")
+        self._set_label_text(self.robot_ready_label, "机器人状态: 待机中", "#95a5a6")
+
+    def start_recording(self):
+        """开始录制"""
+        if self.is_recording:
+            return
+
+        try:
+            if not self.robot_ready or not self.action_socket:
+                messagebox.showwarning("提示", "机器人未就绪，请稍后再试")
+                return
+
+            # 获取录制序号
+            self.session_index = self.get_next_record_index()
+            self.record_start_time = time.time()
+
+            # 创建录制目录
+            video_session_dir = os.path.join(
+                self.video_base_path,
+                f"record_{self.session_index:03d}"
+            )
+            action_session_dir = os.path.join(
+                self.action_base_path,
+                f"record_{self.session_index:03d}"
+            )
+
+            os.makedirs(video_session_dir, exist_ok=True)
+            os.makedirs(action_session_dir, exist_ok=True)
+
+            self.session_dir = {
+                'video': video_session_dir,
+                'action': action_session_dir
+            }
+
+            # 更新UI
+            self.session_label.config(text=f"录制序号: record_{self.session_index:03d}")
+            self.video_path_label.config(text=f"视频: {video_session_dir}/")
+            self.action_path_label.config(text=f"动作: {action_session_dir}/")
+
+            # 清空数据缓冲
+            self.action_data_buffer = []
+
+            # 创建视频写入器
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+
+            for i in range(len(self.pipelines)):
+                filename = os.path.join(
+                    video_session_dir,
+                    f"camera_{i+1}_{timestamp}.mp4"
+                )
+                writer = cv2.VideoWriter(filename, fourcc, 30.0, (640, 480))
+                self.video_writers.append(writer)
+                print(f"创建视频文件: {filename}")
+
+            # 开始录制
+            self.is_recording = True
+
+            # 更新UI
+            self.status_label.config(text="录制状态: 正在录制", fg="#e74c3c")
+            self.start_button.config(state=tk.DISABLED)
+            self.stop_button.config(state=tk.NORMAL)
+
+            # 开始更新录制时长
+            self.update_duration()
+
+            print(f"开始录制: record_{self.session_index:03d}")
+
+        except Exception as e:
+            messagebox.showerror("错误", f"启动录制失败: {str(e)}")
+            self.stop_recording()
+
+    def stop_recording(self):
+        """停止录制"""
+        if not self.is_recording:
+            return
+
+        try:
+            self.is_recording = False
+
+            # 关闭视频写入器
+            for writer in self.video_writers:
+                writer.release()
+            self.video_writers = []
+
+            # 保存动作数据
+            if self.action_data_buffer and self.session_dir:
+                self.save_action_data()
+
+            # 更新UI
+            self.status_label.config(text="录制状态: 录制已停止", fg="#95a5a6")
+            self.start_button.config(state=tk.NORMAL)
+            self.stop_button.config(state=tk.DISABLED)
+
+            messagebox.showinfo("完成", f"录制完成！\n已保存到: record_{self.session_index:03d}")
+            print(f"录制完成: record_{self.session_index:03d}")
+
+        except Exception as e:
+            messagebox.showerror("错误", f"停止录制失败: {str(e)}")
+
+    def save_action_data(self):
+        """保存动作数据"""
+        if not self.action_data_buffer or not self.session_dir:
+            return
+
+        action_dir = self.session_dir['action']
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        # 保存JSON
+        json_file = os.path.join(action_dir, f"action_data_{timestamp}.json")
+        with open(json_file, 'w') as f:
+            json.dump({
+                'session': f"record_{self.session_index:03d}",
+                'timestamp': timestamp,
+                'packet_count': len(self.action_data_buffer),
+                'data': self.action_data_buffer
+            }, f, indent=2)
+
+        # 保存HDF5
+        hdf5_file = os.path.join(action_dir, f"action_data_{timestamp}.h5")
+        with h5py.File(hdf5_file, 'w') as f:
+            f.attrs['session'] = f"record_{self.session_index:03d}"
+            f.attrs['timestamp'] = timestamp
+            f.attrs['packet_count'] = len(self.action_data_buffer)
+
+            # 提取数据
+            timestamps = []
+            gello_pos = []
+            franka_pos = []
+            franka_vel = []
+            franka_eff = []
+            gripper_pos = []
+            gripper_vel = []
+            gripper_eff = []
+            ee_pos = []
+            ee_ori = []
+
+            for data in self.action_data_buffer:
+                timestamps.append(data.get('timestamp', 0))
+
+                if data.get('gello_joints'):
+                    gello_pos.append(data['gello_joints'].get('position', [0]*7))
+                else:
+                    gello_pos.append([0]*7)
+
+                if data.get('franka_joints'):
+                    franka_pos.append(data['franka_joints'].get('position', [0]*7))
+                    franka_vel.append(data['franka_joints'].get('velocity', [0]*7))
+                    franka_eff.append(data['franka_joints'].get('effort', [0]*7))
+                else:
+                    franka_pos.append([0]*7)
+                    franka_vel.append([0]*7)
+                    franka_eff.append([0]*7)
+
+                # 提取夹爪数据
+                if data.get('gripper_joints'):
+                    g_pos = data['gripper_joints'].get('position', [])
+                    g_vel = data['gripper_joints'].get('velocity', [])
+                    g_eff = data['gripper_joints'].get('effort', [])
+                    # 夹爪通常有2个关节
+                    gripper_pos.append(list(g_pos) if g_pos else [0, 0])
+                    gripper_vel.append(list(g_vel) if g_vel else [0, 0])
+                    gripper_eff.append(list(g_eff) if g_eff else [0, 0])
+                else:
+                    gripper_pos.append([0, 0])
+                    gripper_vel.append([0, 0])
+                    gripper_eff.append([0, 0])
+
+                if data.get('end_effector_pose'):
+                    pos = data['end_effector_pose']['position']
+                    ori = data['end_effector_pose']['orientation']
+                    ee_pos.append([pos['x'], pos['y'], pos['z']])
+                    ee_ori.append([ori['x'], ori['y'], ori['z'], ori['w']])
+                else:
+                    ee_pos.append([0, 0, 0])
+                    ee_ori.append([0, 0, 0, 1])
+
+            # 保存数据集
+            f.create_dataset('timestamps', data=np.array(timestamps))
+            f.create_dataset('gello/positions', data=np.array(gello_pos))
+            f.create_dataset('franka/positions', data=np.array(franka_pos))
+            f.create_dataset('franka/velocities', data=np.array(franka_vel))
+            f.create_dataset('franka/efforts', data=np.array(franka_eff))
+            f.create_dataset('gripper/positions', data=np.array(gripper_pos))
+            f.create_dataset('gripper/velocities', data=np.array(gripper_vel))
+            f.create_dataset('gripper/efforts', data=np.array(gripper_eff))
+            f.create_dataset('end_effector/positions', data=np.array(ee_pos))
+            f.create_dataset('end_effector/orientations', data=np.array(ee_ori))
+
+        print(f"动作数据已保存: {action_dir}")
+
+    def update_duration(self):
+        """更新录制时长"""
+        if self.is_recording and self.record_start_time:
+            elapsed = int(time.time() - self.record_start_time)
+            hours = elapsed // 3600
+            minutes = (elapsed % 3600) // 60
+            seconds = elapsed % 60
+
+            self.time_label.config(text=f"录制时长: {hours:02d}:{minutes:02d}:{seconds:02d}")
+            self.root.after(1000, self.update_duration)
+
+    def cleanup_remote_processes(self):
+        """清理远程进程"""
+        try:
+            print("清理远程进程...")
+            subprocess.run([
+                "sshpass", "-p", REMOTE_PASSWORD,
+                "ssh", "-o", "StrictHostKeyChecking=no",
+                f"{REMOTE_USER}@{REMOTE_HOST}",
+                "pkill -9 -f 'remote_data_bridge.py'; pkill -9 -f 'run_fr3_real_ros2.sh'; pkill -9 -f 'gello_publisher'; pkill -9 -f 'franka_fr3'; pkill -9 -f 'franka_gripper'; pkill -9 -f 'ros2'; rm -rf /tmp/robot_data_bridge"
+            ], check=False, capture_output=True, timeout=5)
+            print("远程进程已清理")
+        except Exception as e:
+            print(f"清理远程进程错误: {e}")
+
+    def on_window_close(self):
+        """窗口关闭事件"""
+        if self.is_recording:
+            if messagebox.askyesno("确认", "正在录制中，确定要退出吗？\n（数据将会保存）"):
+                self.stop_recording()
+                self.cleanup_and_exit()
+        else:
+            if messagebox.askyesno("确认", "确定要退出吗？"):
+                self.cleanup_and_exit()
+
+    def on_exit_button(self):
+        """退出按钮事件"""
+        self.on_window_close()
+
+    def cleanup_and_exit(self):
+        """清理并退出"""
+        print("正在退出...")
+        self.running = False
+
+        if self.is_recording:
+            self.stop_recording()
+
+        if self.action_socket:
+            try:
+                self.action_socket.close()
+            except Exception:
+                pass
+            self.action_socket = None
+
+        # 释放相机
+        for pipeline in self.pipelines:
+            try:
+                pipeline.stop()
+            except:
+                pass
+
+        # 清理远程进程
+        self.cleanup_remote_processes()
+
+        # 关闭窗口
+        try:
+            self.root.quit()
+            self.root.destroy()
+        except:
+            pass
+
+        sys.exit(0)
+
+    def run(self):
+        """运行主循环"""
+        self.root.mainloop()
+
+
+def main():
+    try:
+        app = VideoActionRecorder()
+        app.run()
+    except KeyboardInterrupt:
+        print("\n程序被中断")
+        sys.exit(0)
+    except Exception as e:
+        print(f"程序错误: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,16 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=三相机录制
+Name[zh_CN]=三相机录制
+GenericName=视频录制系统
+GenericName[zh_CN]=视频录制系统
+Comment=点击启动三相机同步视频录制系统
+Comment[zh_CN]=点击启动三相机同步视频录制系统
+Exec=/home/ubuntu/take_data/take_video/启动.sh
+Icon=camera-video
+Terminal=false
+Categories=AudioVideo;Video;Recorder;
+Path=/home/ubuntu/take_data/take_video
+StartupNotify=true
+X-GNOME-Autostart-enabled=true

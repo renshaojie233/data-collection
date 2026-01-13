@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual envs
+.venv/
+**/.venv/
+
+# Build artifacts
+build/
+install/
+log/
+**/build/
+**/install/
+**/log/
+
+# ROS logs
+.ros/
+**/.ros/
+
+# Data outputs
+local/take_data/data/
+local/take_data/lerobot_data/
+local/take_data/**/logs/
+remote/**/replay_data/
+remote/**/data/
+
+# Media outputs
+*.mp4
+*.avi
+*.mkv
+
+# Temp
+**/tmp_*
+*.tmp
+
+# OS
+.DS_Store
+Thumbs.db

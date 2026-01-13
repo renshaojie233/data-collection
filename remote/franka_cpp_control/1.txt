@@ -1,0 +1,1 @@
+ROBOTIQ_PORT=/dev/serial/by-id/usb-FTDI_USB_TO_RS-485_DA61OLIF-if00-port0 /home/rsj/franka_cpp_control/run_track_json_impedance_gripper_robotiq.sh 172.16.0.2 /home/rsj/franka_cpp_control/replay_data/action/action_data_20251230_013257_replay.json

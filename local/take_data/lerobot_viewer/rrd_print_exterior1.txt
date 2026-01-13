@@ -1,0 +1,358 @@
+Showing data after migration to latest Rerun version
+StoreInfo {
+    store_id: StoreId(
+        Recording,
+        "lerobot_take_droid_pi05_15fps",
+        "episode_0",
+    ),
+    cloned_from: None,
+    store_source: File {
+        file_source: Sdk,
+    },
+    store_version: Some(
+        CrateVersion {
+            major: 0,
+            minor: 28,
+            patch: 1,
+            meta: None,
+        },
+    ),
+}
+StoreInfo {
+    store_id: StoreId(
+        Recording,
+        "lerobot_take_droid_pi05_15fps",
+        "episode_1",
+    ),
+    cloned_from: None,
+    store_source: File {
+        file_source: Sdk,
+    },
+    store_version: Some(
+        CrateVersion {
+            major: 0,
+            minor: 28,
+            patch: 1,
+            meta: None,
+        },
+    ),
+}
+StoreInfo {
+    store_id: StoreId(
+        Recording,
+        "lerobot_take_droid_pi05_15fps",
+        "episode_2",
+    ),
+    cloned_from: None,
+    store_source: File {
+        file_source: Sdk,
+    },
+    store_version: Some(
+        CrateVersion {
+            major: 0,
+            minor: 28,
+            patch: 1,
+            meta: None,
+        },
+    ),
+}
+StoreInfo {
+    store_id: StoreId(
+        Recording,
+        "lerobot_take_droid_pi05_15fps",
+        "episode_3",
+    ),
+    cloned_from: None,
+    store_source: File {
+        file_source: Sdk,
+    },
+    store_version: Some(
+        CrateVersion {
+            major: 0,
+            minor: 28,
+            patch: 1,
+            meta: None,
+        },
+    ),
+}
+StoreInfo {
+    store_id: StoreId(
+        Recording,
+        "lerobot_take_droid_pi05_15fps",
+        "episode_4",
+    ),
+    cloned_from: None,
+    store_source: File {
+        file_source: Sdk,
+    },
+    store_version: Some(
+        CrateVersion {
+            major: 0,
+            minor: 28,
+            patch: 1,
+            meta: None,
+        },
+    ),
+}
+StoreInfo {
+    store_id: StoreId(
+        Recording,
+        "lerobot_take_droid_pi05_15fps",
+        "episode_5",
+    ),
+    cloned_from: None,
+    store_source: File {
+        file_source: Sdk,
+    },
+    store_version: Some(
+        CrateVersion {
+            major: 0,
+            minor: 28,
+            patch: 1,
+            meta: None,
+        },
+    ),
+}
+StoreInfo {
+    store_id: StoreId(
+        Recording,
+        "lerobot_take_droid_pi05_15fps",
+        "episode_6",
+    ),
+    cloned_from: None,
+    store_source: File {
+        file_source: Sdk,
+    },
+    store_version: Some(
+        CrateVersion {
+            major: 0,
+            minor: 28,
+            patch: 1,
+            meta: None,
+        },
+    ),
+}
+StoreInfo {
+    store_id: StoreId(
+        Recording,
+        "lerobot_take_droid_pi05_15fps",
+        "episode_7",
+    ),
+    cloned_from: None,
+    store_source: File {
+        file_source: Sdk,
+    },
+    store_version: Some(
+        CrateVersion {
+            major: 0,
+            minor: 28,
+            patch: 1,
+            meta: None,
+        },
+    ),
+}
+StoreInfo {
+    store_id: StoreId(
+        Recording,
+        "lerobot_take_droid_pi05_15fps",
+        "episode_8",
+    ),
+    cloned_from: None,
+    store_source: File {
+        file_source: Sdk,
+    },
+    store_version: Some(
+        CrateVersion {
+            major: 0,
+            minor: 28,
+            patch: 1,
+            meta: None,
+        },
+    ),
+}
+StoreInfo {
+    store_id: StoreId(
+        Recording,
+        "lerobot_take_droid_pi05_15fps",
+        "episode_9",
+    ),
+    cloned_from: None,
+    store_source: File {
+        file_source: Sdk,
+    },
+    store_version: Some(
+        CrateVersion {
+            major: 0,
+            minor: 28,
+            patch: 1,
+            meta: None,
+        },
+    ),
+}
+StoreInfo {
+    store_id: StoreId(
+        Recording,
+        "lerobot_take_droid_pi05_15fps",
+        "episode_10",
+    ),
+    cloned_from: None,
+    store_source: File {
+        file_source: Sdk,
+    },
+    store_version: Some(
+        CrateVersion {
+            major: 0,
+            minor: 28,
+            patch: 1,
+            meta: None,
+        },
+    ),
+}
+StoreInfo {
+    store_id: StoreId(
+        Recording,
+        "lerobot_take_droid_pi05_15fps",
+        "episode_11",
+    ),
+    cloned_from: None,
+    store_source: File {
+        file_source: Sdk,
+    },
+    store_version: Some(
+        CrateVersion {
+            major: 0,
+            minor: 28,
+            patch: 1,
+            meta: None,
+        },
+    ),
+}
+StoreInfo {
+    store_id: StoreId(
+        Recording,
+        "lerobot_take_droid_pi05_15fps",
+        "episode_12",
+    ),
+    cloned_from: None,
+    store_source: File {
+        file_source: Sdk,
+    },
+    store_version: Some(
+        CrateVersion {
+            major: 0,
+            minor: 28,
+            patch: 1,
+            meta: None,
+        },
+    ),
+}
+StoreInfo {
+    store_id: StoreId(
+        Recording,
+        "lerobot_take_droid_pi05_15fps",
+        "episode_13",
+    ),
+    cloned_from: None,
+    store_source: File {
+        file_source: Sdk,
+    },
+    store_version: Some(
+        CrateVersion {
+            major: 0,
+            minor: 28,
+            patch: 1,
+            meta: None,
+        },
+    ),
+}
+StoreInfo {
+    store_id: StoreId(
+        Recording,
+        "lerobot_take_droid_pi05_15fps",
+        "episode_14",
+    ),
+    cloned_from: None,
+    store_source: File {
+        file_source: Sdk,
+    },
+    store_version: Some(
+        CrateVersion {
+            major: 0,
+            minor: 28,
+            patch: 1,
+            meta: None,
+        },
+    ),
+}
+StoreInfo {
+    store_id: StoreId(
+        Recording,
+        "lerobot_take_droid_pi05_15fps",
+        "episode_15",
+    ),
+    cloned_from: None,
+    store_source: File {
+        file_source: Sdk,
+    },
+    store_version: Some(
+        CrateVersion {
+            major: 0,
+            minor: 28,
+            patch: 1,
+            meta: None,
+        },
+    ),
+}
+StoreInfo {
+    store_id: StoreId(
+        Recording,
+        "lerobot_take_droid_pi05_15fps",
+        "episode_16",
+    ),
+    cloned_from: None,
+    store_source: File {
+        file_source: Sdk,
+    },
+    store_version: Some(
+        CrateVersion {
+            major: 0,
+            minor: 28,
+            patch: 1,
+            meta: None,
+        },
+    ),
+}
+Chunk(chunk_188666E3A5530E326150e6997f84235c) with 1 rows (115 KiB) - /exterior_image_1_left - data columns: [/exterior_image_1_left@AssetVideo:blob]
+Chunk(chunk_188666E3A552D0F46150e6997f84235b) with 489 rows (17.6 KiB) - /exterior_image_1_left - data columns: [/exterior_image_1_left@VideoFrameReference:timestamp]
+Chunk(chunk_188666E3A58495C06150e6997f842372) with 1 rows (109 KiB) - /exterior_image_1_left - data columns: [/exterior_image_1_left@AssetVideo:blob]
+Chunk(chunk_188666E3A584694D6150e6997f842371) with 494 rows (17.8 KiB) - /exterior_image_1_left - data columns: [/exterior_image_1_left@VideoFrameReference:timestamp]
+Chunk(chunk_188666E3A5A98A706150e6997f842388) with 1 rows (109 KiB) - /exterior_image_1_left - data columns: [/exterior_image_1_left@AssetVideo:blob]
+Chunk(chunk_188666E3A5A95FE66150e6997f842387) with 519 rows (18.7 KiB) - /exterior_image_1_left - data columns: [/exterior_image_1_left@VideoFrameReference:timestamp]
+Chunk(chunk_188666E3A5C69FCF6150e6997f84239e) with 1 rows (89.9 KiB) - /exterior_image_1_left - data columns: [/exterior_image_1_left@AssetVideo:blob]
+Chunk(chunk_188666E3A5C68D5A6150e6997f84239d) with 426 rows (15.4 KiB) - /exterior_image_1_left - data columns: [/exterior_image_1_left@VideoFrameReference:timestamp]
+Chunk(chunk_188666E3A5DC7FF16150e6997f8423b4) with 1 rows (106 KiB) - /exterior_image_1_left - data columns: [/exterior_image_1_left@AssetVideo:blob]
+Chunk(chunk_188666E3A5DC67566150e6997f8423b3) with 531 rows (19.1 KiB) - /exterior_image_1_left - data columns: [/exterior_image_1_left@VideoFrameReference:timestamp]
+Chunk(chunk_188666E3A5F1B87E6150e6997f8423ca) with 1 rows (103 KiB) - /exterior_image_1_left - data columns: [/exterior_image_1_left@AssetVideo:blob]
+Chunk(chunk_188666E3A5F1A0B66150e6997f8423c9) with 512 rows (18.4 KiB) - /exterior_image_1_left - data columns: [/exterior_image_1_left@VideoFrameReference:timestamp]
+Chunk(chunk_188666E3A60644946150e6997f8423e0) with 1 rows (90.0 KiB) - /exterior_image_1_left - data columns: [/exterior_image_1_left@AssetVideo:blob]
+Chunk(chunk_188666E3A60636486150e6997f8423df) with 415 rows (15.0 KiB) - /exterior_image_1_left - data columns: [/exterior_image_1_left@VideoFrameReference:timestamp]
+Chunk(chunk_188666E3A616FEF06150e6997f8423f6) with 1 rows (87.4 KiB) - /exterior_image_1_left - data columns: [/exterior_image_1_left@AssetVideo:blob]
+Chunk(chunk_188666E3A616F6AA6150e6997f8423f5) with 437 rows (15.8 KiB) - /exterior_image_1_left - data columns: [/exterior_image_1_left@VideoFrameReference:timestamp]
+Chunk(chunk_188666E3A6252F126150e6997f84240c) with 1 rows (82.2 KiB) - /exterior_image_1_left - data columns: [/exterior_image_1_left@AssetVideo:blob]
+Chunk(chunk_188666E3A62525BC6150e6997f84240b) with 475 rows (17.1 KiB) - /exterior_image_1_left - data columns: [/exterior_image_1_left@VideoFrameReference:timestamp]
+Chunk(chunk_188666E3A634D2B56150e6997f842422) with 1 rows (111 KiB) - /exterior_image_1_left - data columns: [/exterior_image_1_left@AssetVideo:blob]
+Chunk(chunk_188666E3A634C6266150e6997f842421) with 579 rows (20.8 KiB) - /exterior_image_1_left - data columns: [/exterior_image_1_left@VideoFrameReference:timestamp]
+Chunk(chunk_188666E3A648895D6150e6997f842438) with 1 rows (111 KiB) - /exterior_image_1_left - data columns: [/exterior_image_1_left@AssetVideo:blob]
+Chunk(chunk_188666E3A64877CE6150e6997f842437) with 618 rows (22.2 KiB) - /exterior_image_1_left - data columns: [/exterior_image_1_left@VideoFrameReference:timestamp]
+Chunk(chunk_188666E3A65E338A6150e6997f84244e) with 1 rows (113 KiB) - /exterior_image_1_left - data columns: [/exterior_image_1_left@AssetVideo:blob]
+Chunk(chunk_188666E3A65E221D6150e6997f84244d) with 588 rows (21.1 KiB) - /exterior_image_1_left - data columns: [/exterior_image_1_left@VideoFrameReference:timestamp]
+Chunk(chunk_188666E3A672B9E76150e6997f842464) with 1 rows (115 KiB) - /exterior_image_1_left - data columns: [/exterior_image_1_left@AssetVideo:blob]
+Chunk(chunk_188666E3A672A3676150e6997f842463) with 550 rows (19.8 KiB) - /exterior_image_1_left - data columns: [/exterior_image_1_left@VideoFrameReference:timestamp]
+Chunk(chunk_188666E3A684E1196150e6997f84247a) with 1 rows (66.2 KiB) - /exterior_image_1_left - data columns: [/exterior_image_1_left@AssetVideo:blob]
+Chunk(chunk_188666E3A684D31E6150e6997f842479) with 406 rows (14.7 KiB) - /exterior_image_1_left - data columns: [/exterior_image_1_left@VideoFrameReference:timestamp]
+Chunk(chunk_188666E3A6956E816150e6997f842490) with 1 rows (121 KiB) - /exterior_image_1_left - data columns: [/exterior_image_1_left@AssetVideo:blob]
+Chunk(chunk_188666E3A6955B8E6150e6997f84248f) with 651 rows (23.3 KiB) - /exterior_image_1_left - data columns: [/exterior_image_1_left@VideoFrameReference:timestamp]
+Chunk(chunk_188666E3A6AAC29C6150e6997f8424a6) with 1 rows (84.5 KiB) - /exterior_image_1_left - data columns: [/exterior_image_1_left@AssetVideo:blob]
+Chunk(chunk_188666E3A6AAB27D6150e6997f8424a5) with 347 rows (12.6 KiB) - /exterior_image_1_left - data columns: [/exterior_image_1_left@VideoFrameReference:timestamp]
+Chunk(chunk_188666E3A6B7CBB16150e6997f8424bc) with 1 rows (96.0 KiB) - /exterior_image_1_left - data columns: [/exterior_image_1_left@AssetVideo:blob]
+Chunk(chunk_188666E3A6B7C1986150e6997f8424bb) with 417 rows (15.1 KiB) - /exterior_image_1_left - data columns: [/exterior_image_1_left@VideoFrameReference:timestamp]

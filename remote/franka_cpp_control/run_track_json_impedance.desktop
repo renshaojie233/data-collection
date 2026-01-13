@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Franka Trajectory Replay (Smooth + Gripper)
+Comment=Replay recorded trajectory with impedance control and gripper
+Exec=/home/rsj/franka_cpp_control/run_track_json_impedance_gripper_oneclick.sh
+Terminal=true
+Icon=utilities-terminal
+Categories=Utility;

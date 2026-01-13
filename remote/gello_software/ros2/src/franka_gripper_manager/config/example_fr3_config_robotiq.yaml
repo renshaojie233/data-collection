@@ -1,0 +1,3 @@
+robot1:
+  com_port: "/dev/robotiq"
+  namespace: "gripper"

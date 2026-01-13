@@ -1,0 +1,71 @@
+═══════════════════════════════════════════════════════════════════════════
+                    FRANKA机械臂录制重放系统 - 快速参考
+═══════════════════════════════════════════════════════════════════════════
+
+【一键启动】
+  cd ~/gello_software
+  ./run_fr3_with_recorder.sh
+
+【主要文件】
+  run_fr3_real_ros2.sh          ← 原始脚本（未修改）
+  run_fr3_with_recorder.sh      ← 新脚本（含录制功能）
+  franka_recorder/              ← 录制系统目录
+  franka_recordings/            ← 录制文件保存位置
+
+【GUI操作】
+  🔴 Start Recording  → 开始录制真实机械臂数据
+  ⏹️  Stop Recording   → 停止录制并保存
+  ▶️  Start Replay    → 开始重放录制的轨迹
+  ⏹️  Stop Replay     → 停止重放
+  🔄                  → 刷新录制文件列表
+  📁                  → 打开录制文件夹
+
+【数据流向】
+  录制：GELLO → 机械臂 → /franka/joint_states → 录制节点 → .pkl文件
+  重放：.pkl文件 → 重放节点 → /gello/joint_states → 机械臂
+
+【安全检查】
+  ✓ 重放前清空机械臂周围区域
+  ✓ 手放在急停按钮上
+  ✓ 先测试短轨迹（5-10秒）
+  ✓ 全程监控机械臂运动
+  ✓ 环境与录制时保持一致
+
+【测试安装】
+  cd ~/gello_software/franka_recorder
+  ./test_installation.py
+
+【故障排除】
+  GUI不启动：    sudo apt-get install python3-tk
+  录制为空：      ros2 topic echo /franka/joint_states
+  检查节点：      ros2 node list | grep franka
+  用回原系统：    ./run_fr3_real_ros2.sh
+
+【详细文档】
+  快速开始：      FRANKA_RECORDER_QUICKSTART.md
+  中文说明：      franka_recorder/USAGE_CN.md
+  完整文档：      franka_recorder/README.md
+  安装总结：      INSTALLATION_SUMMARY.md
+
+【ROS2服务（高级）】
+  # 开始录制
+  ros2 service call /franka_recorder/start_stop std_srvs/srv/SetBool "{data: true}"
+
+  # 停止录制
+  ros2 service call /franka_recorder/start_stop std_srvs/srv/SetBool "{data: false}"
+
+  # 列出录制
+  ros2 service call /franka_replay/list_recordings std_srvs/srv/Trigger
+
+  # 开始重放
+  ros2 service call /franka_replay/start_stop std_srvs/srv/SetBool "{data: true}"
+
+【重要提示】
+  • 原有功能完全不受影响
+  • 录制的是真实机械臂数据，不是GELLO数据
+  • 只有点击录制按钮后才会保存数据
+  • 可随时停止录制或重放
+
+═══════════════════════════════════════════════════════════════════════════
+                        系统已准备就绪，祝使用愉快！
+═══════════════════════════════════════════════════════════════════════════

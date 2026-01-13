@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=三相机录制系统
+Name[zh_CN]=三相机录制系统
+Comment=启动三相机同步视频录制系统（图形化启动器）
+Comment[zh_CN]=启动三相机同步视频录制系统（图形化启动器）
+Exec=/home/ubuntu/take_data/take_video/启动录制.sh
+Icon=camera-video
+Terminal=false
+Categories=Application;AudioVideo;Video;
+Path=/home/ubuntu/take_data/take_video
+StartupNotify=true

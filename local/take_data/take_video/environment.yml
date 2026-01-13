@@ -1,0 +1,13 @@
+name: take_data
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.9
+  - numpy
+  - pip
+  - tk
+  - pip:
+    - opencv-python
+    - pyrealsense2
+    - Pillow

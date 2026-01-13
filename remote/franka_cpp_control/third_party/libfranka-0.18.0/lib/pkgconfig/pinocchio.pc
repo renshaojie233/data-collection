@@ -1,0 +1,22 @@
+prefix=/home/rsj/franka_lib/install
+exec_prefix=/home/rsj/franka_lib/install
+libdir=/home/rsj/franka_lib/install/lib
+bindir=/home/rsj/franka_lib/install/bin
+pkglibdir=/home/rsj/franka_lib/install/lib/pinocchio
+includedir=/home/rsj/franka_lib/install/include
+datarootdir=/home/rsj/franka_lib/install/share
+pkgdatarootdir=/home/rsj/franka_lib/install/share
+docdir=/home/rsj/franka_lib/install/share/doc/pinocchio
+doxygendocdir=/home/rsj/franka_lib/install/share/doc/pinocchio/doxygen-html
+
+Name: pinocchio
+Description: A fast and flexible implementation of Rigid Body Dynamics algorithms and their analytical derivatives
+URL: http://github.com/stack-of-tasks/pinocchio
+Version: 2.9.0
+Requires: eigen3 >= 3.0.5, urdfdom >= 0.2.0
+Conflicts: 
+Libs: -L${libdir}  -lpinocchio -L/usr/lib/x86_64-linux-gnu -lboost_filesystem -lboost_serialization -lboost_system
+Libs.private: 
+Cflags:  -I${includedir} -DPINOCCHIO_WITH_URDFDOM -DBOOST_MPL_LIMIT_LIST_SIZE=30
+
+

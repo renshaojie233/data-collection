@@ -1,0 +1,5 @@
+gello_zero: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+robot_zero: [0.0, 0.0, 0.0, -1.57, 0.0, 1.57, 1.57]
+publish_rate_hz: 25.0
+capture_robot_zero: false
+return_speed_rad_s: 0.5

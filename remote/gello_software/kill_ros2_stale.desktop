@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Kill ROS2 Stale
+Comment=Kill stale ROS2/Franka/GELLO processes and show remaining
+Exec=gnome-terminal -- bash -lc "/home/rsj/gello_software/kill_ros2_stale.sh; echo; echo 'Press Enter to close'; read"
+Icon=utilities-terminal
+Terminal=false
+Categories=Utility;

@@ -1,0 +1,14 @@
+SINGLE:
+  com_port: "/dev/gello"
+  namespace: ""
+  num_arm_joints: 7
+  joint_signs: [1, 1, 1, -1, 1, -1, 1]
+  gripper: true
+  best_offsets: [3.142, 3.142, 3.142, 3.142, 3.142, 3.142, 0.0] # rad
+  gripper_range_rad: [2.78591, 3.51546]
+  # Optional Dynamixel control parameters for all arm joints (+ gripper):
+  dynamixel_torque_enable: [0, 0, 0, 0, 0, 0, 0, 0]
+  dynamixel_goal_position: [0.0, 0.0, 0.0, -1.571, 0.0, 1.571, 0.0, 3.515]
+  dynamixel_kp_p:          [30, 60, 0, 30, 0, 0, 0, 50]
+  dynamixel_kp_i:          [0, 0, 0, 0, 0, 0, 0, 0]
+  dynamixel_kp_d:          [250, 100, 80, 60, 30, 10, 5, 0]

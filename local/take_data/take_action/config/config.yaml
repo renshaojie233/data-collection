@@ -1,0 +1,35 @@
+# Robot Data Collection Configuration
+
+# Remote machine settings
+remote:
+  host: "172.16.1.2"
+  user: "rsj"
+  password: "2064027038"
+  port: 22
+
+# ROS2 settings
+ros2:
+  script_path: "/home/rsj/gello_software/run_fr3_real_ros2_robotiq.sh"
+  setup_commands:
+    - "source /opt/ros/humble/setup.bash"
+    - "source ~/franka_ros2_ws/install/setup.bash"
+    - "source ~/gello_software/ros2/install/setup.bash"
+
+# Data bridge settings
+bridge:
+  tcp_port: 9999
+  remote_dir: "/tmp/robot_data_bridge"
+
+# Data collection settings
+collection:
+  data_dir: "../data"
+  log_dir: "../logs"
+  save_formats:
+    - "json"
+    - "hdf5"
+
+# ROS2 topics to subscribe
+topics:
+  gello_joints: "/gello/joint_states"
+  franka_joints: "/franka/joint_states"
+  end_effector_pose: "/franka_robot_state_broadcaster/current_pose"
