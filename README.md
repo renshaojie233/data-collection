@@ -33,6 +33,72 @@ Note: this file currently contains credentials; update them locally before use.
 
 5) Click **停止录制** to stop. In relative mode, the robot will return to `robot_zero` smoothly.
 
+## Deployment (Local Machine)
+
+1) Install system dependencies (Ubuntu 20.04/22.04):
+```
+sudo apt update
+sudo apt install -y python3 python3-pip python3-tk python3-venv
+```
+
+2) Install RealSense and OpenCV:
+```
+sudo apt install -y librealsense2-utils librealsense2-dev
+pip3 install opencv-python pyrealsense2 numpy h5py pillow
+```
+
+3) Run the GUI:
+```
+python3 local/take_data/take_video_action/video_action_recorder.py
+```
+
+4) If you need to update local code from `/home/ubuntu/take_data`:
+```
+scripts/sync_local_from_ubuntu.sh /home/ubuntu/take_data
+```
+
+## Deployment (Remote Robot)
+
+Remote code is stored under `remote/gello_software` and `remote/franka_cpp_control`.
+
+1) Ensure ROS2 Humble is installed on the remote machine.
+
+2) Copy the remote folders to the robot:
+```
+rsync -av remote/gello_software rsj@172.16.1.2:/home/rsj/
+rsync -av remote/franka_cpp_control rsj@172.16.1.2:/home/rsj/
+```
+
+3) Relative control entrypoint:
+```
+/home/rsj/gello_software/start_relative_gello_control.sh
+```
+
+4) Absolute control entrypoint:
+```
+/home/rsj/gello_software/run_fr3_real_ros2_robotiq.sh
+```
+
+## Sync Scripts
+
+Two helper scripts keep the repo in sync:
+
+- Local (Ubuntu machine):
+```
+scripts/sync_local_from_ubuntu.sh /home/ubuntu/take_data
+```
+
+- Remote robot:
+```
+export REMOTE_HOST=172.16.1.2
+export REMOTE_USER=rsj
+export REMOTE_BASE=/home/rsj
+export SSH_PASS=your_password_here   # optional (uses sshpass)
+scripts/sync_remote_from_robot.sh
+```
+
+If you do not set `SSH_PASS`, the script uses normal SSH and expects keys/agent.
+
 ## Remote Setup (GELLO Control)
 
 Remote control code is under `remote/gello_software/`.
